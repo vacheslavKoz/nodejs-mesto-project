@@ -39,6 +39,9 @@ export const createUser = (req:Request, res:Response) => {
 
 export const updateProfile = (req:Request, res:Response) => {
   const { name, about } = req.body;
+  if (!req.user) {
+    return res.status(401).send({ message: 'Необходима авторизация' });
+  }
   const userId = req.user!._id;
 
   User.findByIdAndUpdate(userId, { name, about }, { new: true }).then((user) => {
@@ -58,6 +61,10 @@ export const updateProfile = (req:Request, res:Response) => {
 
 export const updateAvatar = (req:Request, res:Response) => {
   const { avatar } = req.body;
+  if (!req.user) {
+    return res.status(401).send({ message: 'Необходима авторизация' });
+  }
+
   const userId = req.user!._id;
 
   User.findByIdAndUpdate(userId, { avatar }, { new: true }).then((user) => {

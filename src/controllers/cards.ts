@@ -8,6 +8,9 @@ export const getCards = (req:Request, res:Response) => {
 
 export const createCard = (req:Request, res:Response) => {
   const { name, link } = req.body;
+  if (!req.user) {
+    return res.status(401).send({ message: 'Необходима авторизация' });
+  }
   const userId = req.user!._id;
   Card.create({ name, link, owner: userId }).then((card) => res.status(201).send(card)).catch((err) => {
     if (err.name === 'ValidationError') {
@@ -36,6 +39,9 @@ export const deleteCard = (req:Request, res:Response) => {
 };
 
 export const likeCard = (req:Request, res:Response) => {
+  if (!req.user) {
+    return res.status(401).send({ message: 'Необходима авторизация' });
+  }
   const userId = req.user?._id;
   Card.findByIdAndUpdate(
     req.params.cardId,
@@ -58,6 +64,9 @@ export const likeCard = (req:Request, res:Response) => {
 };
 
 export const dislikeCard = (req:Request, res:Response) => {
+  if (!req.user) {
+    return res.status(401).send({ message: 'Необходима авторизация' });
+  }
   const userId = req.user?._id;
   Card.findByIdAndUpdate(
     req.params.cardId,
