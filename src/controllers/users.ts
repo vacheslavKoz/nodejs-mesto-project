@@ -44,7 +44,11 @@ export const updateProfile = (req:Request, res:Response) => {
   }
   const userId = req.user!._id;
 
-  User.findByIdAndUpdate(userId, { name, about }, { new: true }).then((user) => {
+  User.findByIdAndUpdate(
+    userId,
+    { name, about },
+    { new: true, runValidators: true },
+  ).then((user) => {
     if (!user) {
       return res.status(NOT_FOUND)
         .send({ message: 'Пользователь не найден' });
@@ -67,7 +71,11 @@ export const updateAvatar = (req:Request, res:Response) => {
 
   const userId = req.user!._id;
 
-  User.findByIdAndUpdate(userId, { avatar }, { new: true }).then((user) => {
+  User.findByIdAndUpdate(
+    userId,
+    { avatar },
+    { new: true, runValidators: true },
+  ).then((user) => {
     if (!user) {
       return res.status(NOT_FOUND)
         .send({ message: 'Пользователь не найден' });
