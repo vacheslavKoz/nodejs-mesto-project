@@ -1,91 +1,85 @@
-import { Response, Request } from 'express';
-import {
-  BAD_REQUEST, NOT_FOUND, INTERNAL_SERVER_ERROR,
-  UNAUTHORIZED,
-} from '../constants';
+import { Response, Request, NextFunction } from 'express';
+import BadRequestError from '../errors/bad-request-err';
+import UnauthorizedError from '../errors/unauthorized-err';
+import NotFoundError from '../errors/not-found-err';
+import ForbiddenError from '../errors/forbidden-err';
 import Card from '../models/card';
 
-export const getCards = (req:Request, res:Response) => {
-  Card.find({}).then((cards) => res.send(cards)).catch(() => res.status(INTERNAL_SERVER_ERROR).send({ message: 'ошибка сервера' }));
+export const getCards = (req:Request, res:Response, next: NextFunction) => {
+  Card.find({}).then((cards) => res.send(cards)).catch(next);
 };
 
-export const createCard = (req:Request, res:Response) => {
+export const createCard = (req:Request, res:Response, next: NextFunction) => {
   const { name, link } = req.body;
   if (!req.user) {
-    return res.status(UNAUTHORIZED).send({ message: 'Необходима авторизация' });
+    return next(new UnauthorizedError('Необходима авторизация'));
   }
   const userId = req.user!._id;
   Card.create({ name, link, owner: userId }).then((card) => res.status(201).send(card)).catch((err) => {
     if (err.name === 'ValidationError') {
-      return res.status(BAD_REQUEST).send({ message: 'не корректные данные!' });
+      return next(new BadRequestError('не корректные данные!'));
     }
-    res.status(INTERNAL_SERVER_ERROR)
-      .send({ message: 'На сервере произошла ошибка' });
+    return next(err);
   });
 };
 
-export const deleteCard = (req:Request, res:Response) => {
-  Card.findByIdAndDelete(req.params.cardId).then((card) => {
+export const deleteCard = async (req:Request, res:Response, next: NextFunction) => {
+  try {
+    if (!req.user) {
+      return next(new UnauthorizedError('необходима авторизация'));
+    }
+    const card = await Card.findById(req.params.cardId);
     if (!card) {
-      return res.status(NOT_FOUND)
-        .send({ message: 'Карточка не найдена' });
+      return next(new NotFoundError('карточка не найдена'));
     }
-    res.send(card);
-  }).catch((err) => {
-    if (err.name === 'CastError') {
-      return res.status(BAD_REQUEST)
-        .send({ message: 'не корректные данные!' });
-    }
-    res.status(INTERNAL_SERVER_ERROR)
-      .send({ message: 'На сервере произошла ошибка' });
-  });
+    if (card.owner.toString() !== req.user._id) { return next(new ForbiddenError('у вас нет прав доступа')); }
+    await card.deleteOne();
+    return res.send(card);
+  } catch (err) {
+    return next(err);
+  }
 };
 
-export const likeCard = (req:Request, res:Response) => {
+export const likeCard = (req:Request, res:Response, next: NextFunction) => {
   if (!req.user) {
-    return res.status(UNAUTHORIZED).send({ message: 'Необходима авторизация' });
+    return next(new UnauthorizedError('Необходима авторизация'));
   }
-  const userId = req.user?._id;
+  const userId = req.user._id;
   Card.findByIdAndUpdate(
     req.params.cardId,
     { $addToSet: { likes: userId } },
     { new: true },
   ).then((card) => {
     if (!card) {
-      return res.status(NOT_FOUND)
-        .send({ message: 'Карточка не найдена' });
+      throw new NotFoundError('Карточка не найдена');
     }
     res.send(card);
   }).catch((err) => {
     if (err.name === 'CastError') {
-      return res.status(BAD_REQUEST)
-        .send({ message: 'не корректные данные!' });
+      return next(new BadRequestError('не корректные данные!'));
     }
-    res.status(INTERNAL_SERVER_ERROR)
-      .send({ message: 'На сервере произошла ошибка' });
+    return next(err);
   });
 };
 
-export const dislikeCard = (req:Request, res:Response) => {
+export const dislikeCard = (req:Request, res:Response, next: NextFunction) => {
   if (!req.user) {
-    return res.status(UNAUTHORIZED).send({ message: 'Необходима авторизация' });
+    return next(new UnauthorizedError('Необходима авторизация'));
   }
-  const userId = req.user?._id;
+  const userId = req.user._id;
   Card.findByIdAndUpdate(
     req.params.cardId,
     { $pull: { likes: userId } },
     { new: true },
   ).then((card) => {
     if (!card) {
-      return res.status(NOT_FOUND).send({ message: 'Карточка не найдена' });
+      throw new NotFoundError('Карточка не найдена');
     }
     res.send(card);
   }).catch((err) => {
     if (err.name === 'CastError') {
-      return res.status(BAD_REQUEST)
-        .send({ message: 'не корректные данные!' });
+      return next(new BadRequestError('не корректные данные!'));
     }
-    res.status(INTERNAL_SERVER_ERROR)
-      .send({ message: 'На сервере произошла ошибка' });
+    return next(err);
   });
 };

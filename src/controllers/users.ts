@@ -1,50 +1,83 @@
-import { Response, Request } from 'express';
-import {
-  BAD_REQUEST, NOT_FOUND, INTERNAL_SERVER_ERROR,
-  UNAUTHORIZED,
-} from '../constants';
+import { Response, Request, NextFunction } from 'express';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import User from '../models/user';
+import BadRequestError from '../errors/bad-request-err';
+import UnauthorizedError from '../errors/unauthorized-err';
+import NotFoundError from '../errors/not-found-err';
+import ConflictError from '../errors/conflict-err';
 
-export const getUsers = (req:Request, res:Response) => {
+export const getUsers = (req:Request, res:Response, next: NextFunction) => {
   User.find({}).then((users) => res.send(users))
-    .catch(() => res.status(INTERNAL_SERVER_ERROR)
-      .send({ message: 'На сервере произошла ошибка' }));
+    .catch(next);
 };
 
-export const getUserById = (req:Request, res:Response) => {
+export const getUserById = (req:Request, res:Response, next: NextFunction) => {
   User.findById(req.params.userId).then((user) => {
     if (!user) {
-      return res.status(NOT_FOUND)
-        .send({ message: 'Пользователь не найден' });
+      throw new NotFoundError('пользователь не найден');
     }
     res.send(user);
   })
     .catch((err) => {
       if (err.name === 'CastError') {
-        return res.status(BAD_REQUEST).send({ message: 'Некорректный _id' });
+        return next(new BadRequestError('Некорректный _id'));
       }
-      res.status(INTERNAL_SERVER_ERROR)
-        .send({ message: 'На сервере произошла ошибка' });
+      return next(err);
     });
 };
 
-export const createUser = (req:Request, res:Response) => {
-  const { name, about, avatar } = req.body;
-  User.create({ name, about, avatar }).then((user) => res.status(201).send(user))
+export const getCurrentUser = (req: Request, res: Response, next: NextFunction) => {
+  const userId = req.user!._id;
+  User.findById(userId).then((user) => {
+    if (!user) { throw new NotFoundError('такого пользователя нет!'); }
+    res.send(user);
+  })
+    .catch(next);
+};
+
+export const createUser = (req:Request, res:Response, next: NextFunction) => {
+  const {
+    name, about, avatar, password, email,
+  } = req.body;
+  bcrypt.hash(password, 10).then((hash) => User.create({
+    name, about, avatar, password: hash, email,
+  })).then((user) => res.status(201).send({
+    _id: user._id,
+    name: user.name,
+    about: user.about,
+    avatar: user.avatar,
+    email: user.email,
+  }))
     .catch((err) => {
-      if (err.name === 'ValidationError') {
-        return res.status(BAD_REQUEST).send({ message: 'Некорректные данные' });
+      if (err.code === 11000) {
+        return next(new ConflictError('Пользователь с таким email уже существует'));
       }
-      res.status(INTERNAL_SERVER_ERROR)
-        .send({ message: 'На сервере произошла ошибка' });
+      if (err.name === 'ValidationError') {
+        return next(new BadRequestError('Некорректные данные'));
+      }
+      return next(err);
     });
 };
 
-export const updateProfile = (req:Request, res:Response) => {
+export const login = (req: Request, res: Response, next: NextFunction) => {
+  const { email, password } = req.body;
+  User.findOne({ email }).select('+password').then((user) => {
+    if (!user) {
+      throw new UnauthorizedError('Неверный логин или пароль');
+    }
+    return bcrypt.compare(password, user.password).then((match) => {
+      if (!match) { throw new UnauthorizedError('Неверный логин или пароль'); }
+      const token = jwt.sign({ _id: user._id }, 'some-secret-key', { expiresIn: '7d' });
+      res.send({ token });
+    });
+  }).catch(next);
+};
+
+export const updateProfile = (req:Request, res:Response, next: NextFunction) => {
   const { name, about } = req.body;
   if (!req.user) {
-    return res.status(UNAUTHORIZED)
-      .send({ message: 'Необходима авторизация' });
+    return next(new UnauthorizedError('Необходима авторизация'));
   }
   const userId = req.user!._id;
 
@@ -54,23 +87,22 @@ export const updateProfile = (req:Request, res:Response) => {
     { new: true, runValidators: true },
   ).then((user) => {
     if (!user) {
-      return res.status(NOT_FOUND)
-        .send({ message: 'Пользователь не найден' });
+      throw new NotFoundError('Пользователь не найден');
     }
     res.status(200).send(user);
   })
     .catch((err) => {
       if (err.name === 'ValidationError') {
-        return res.status(BAD_REQUEST).send({ message: 'Некорректные данные' });
+        return next(new BadRequestError('Некорректные данные'));
       }
-      res.status(INTERNAL_SERVER_ERROR).send({ message: 'На сервере произошла ошибка' });
+      return next(err);
     });
 };
 
-export const updateAvatar = (req:Request, res:Response) => {
+export const updateAvatar = (req:Request, res:Response, next: NextFunction) => {
   const { avatar } = req.body;
   if (!req.user) {
-    return res.status(UNAUTHORIZED).send({ message: 'Необходима авторизация' });
+    return next(new UnauthorizedError('Необходима авторизация'));
   }
 
   const userId = req.user!._id;
@@ -81,15 +113,14 @@ export const updateAvatar = (req:Request, res:Response) => {
     { new: true, runValidators: true },
   ).then((user) => {
     if (!user) {
-      return res.status(NOT_FOUND)
-        .send({ message: 'Пользователь не найден' });
+      throw new NotFoundError('Пользователь не найден');
     }
     res.status(200).send(user);
   })
     .catch((err) => {
       if (err.name === 'ValidationError') {
-        return res.status(BAD_REQUEST).send({ message: 'Некорректные данные' });
+        return next(new BadRequestError('Некорректные данные'));
       }
-      res.status(INTERNAL_SERVER_ERROR).send({ message: 'На сервере произошла ошибка' });
+      return next(err);
     });
 };
