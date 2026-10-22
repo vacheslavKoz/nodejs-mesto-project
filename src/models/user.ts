@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import validator from 'validator';
 
 interface IUser{
 name: string;
@@ -27,7 +28,13 @@ const userSchema = new mongoose.Schema<IUser>({
     type: String, required: true, select: false,
   },
   email: {
-    type: String, required: true, unique: true,
+    type: String,
+    required: true,
+    unique: true,
+    validate: {
+      validator: (v: string) => validator.isEmail(v),
+      message: 'Некорректный email',
+    },
   },
 
 });
